@@ -424,6 +424,8 @@ class PairwiseNegSDR(_Loss):
         self.take_log = take_log
 
     def forward(self, est_targets, targets):
+        # print(targets.size(), est_targets.size())
+        # print(targets[0,:,:])
         assert targets.size() == est_targets.size()
         # Step 1. Zero-mean norm
         if self.zero_mean:

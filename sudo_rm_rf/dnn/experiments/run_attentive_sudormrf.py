@@ -1,6 +1,5 @@
 """!
 @brief Running an experiment with the Attentive-SuDoRmRf
-
 @author Efthymios Tzinis {etzinis2@illinois.edu}
 @copyright University of Illinois at Urbana-Champaign
 """
@@ -33,6 +32,9 @@ import sudo_rm_rf.dnn.utils.cometml_log_audio as cometml_audio_logger
 import sudo_rm_rf.dnn.models.sepformer as sepformer
 
 
+cuda0 = torch.device('cuda:0')
+
+
 args = parser.get_args()
 hparams = vars(args)
 generators = dataset_setup.setup(hparams)
@@ -57,8 +59,9 @@ if hparams['experiment_name'] is not None:
 else:
     experiment.set_name(experiment_name)
 
-os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(
-    [cad for cad in hparams['cuda_available_devices']])
+os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([cad for cad in hparams['cuda_available_devices']])
+# print(','.join(
+#     [cad for cad in hparams['cuda_available_devices']]))
 
 back_loss_tr_loss_name, back_loss_tr_loss = (
     'tr_back_loss_SISDRi',
@@ -162,7 +165,7 @@ for f in model.parameters():
 experiment.log_parameter('Parameters', numparams)
 print('Trainable Parameters: {}'.format(numparams))
 
-model = torch.nn.DataParallel(model).cuda()
+model = torch.nn.DataParallel(model).cuda(cuda0)
 opt = torch.optim.Adam(model.parameters(), lr=hparams['learning_rate'])
 # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 #     optimizer=opt, mode='max', factor=1. / hparams['divide_lr_by'],
@@ -192,8 +195,12 @@ for i in range(hparams['n_epochs']):
     training_gen_tqdm = tqdm(generators['train'], desc='Training')
     for data in training_gen_tqdm:
         opt.zero_grad()
-        clean_wavs = data[-1].cuda()
-        m1wavs = data[0].cuda()
+
+        # print(data[-1].size())
+        clean_wavs = data[-1].cuda(cuda0)
+        m1wavs = data[0].cuda(cuda0)
+
+        print(clean_wavs.size(), m1wavs.size())
 
         # Online mixing over samples of the batch. (This might cause to get
         # utterances from the same speaker but it's highly improbable).
@@ -217,7 +224,7 @@ for i in range(hparams['n_epochs']):
         # )
 
         l = torch.clamp(
-            back_loss_tr_loss(rec_sources_wavs, clean_wavs),
+            back_loss_tr_loss(rec_sources_wavs, clean_wavs[:,0:2,:]),
             min=-30., max=+30.)
         l.backward()
         if hparams['clip_grad_norm'] > 0:
@@ -248,19 +255,30 @@ for i in range(hparams['n_epochs']):
             with torch.no_grad():
                 for data in tqdm(generators[val_set],
                                  desc='Validation on {}'.format(val_set)):
-                    m1wavs = data[0].cuda()
+                    m1wavs = data[0].cuda(cuda0)
                     m1wavs = normalize_tensor_wav(m1wavs)
-                    clean_wavs = data[-1].cuda()
-
-                    rec_sources_wavs = model(m1wavs.unsqueeze(1))
+                    clean_wavs = data[-1].cuda(cuda0)
+                    # print(m1wavs.size())
+                    # print(m1wavs.unsqueeze(1))
+                    # print()
+                    print(clean_wavs.size())
+                    # print(m1wavs[0].unsqueeze(0).size())
+                    # print(m1wavs.unsqueeze(0).size())
+                    # print(m1wavs[1].unsqueeze(1).size())
+                    # rec_sources_wavs = model(m1wavs.unsqueeze(1))
+                    rec_sources_wavs = model(m1wavs[0].unsqueeze(1))
+                    print(rec_sources_wavs.size())
                     # rec_sources_wavs = mixture_consistency.apply(
                     #     rec_sources_wavs, m1wavs.unsqueeze(1)
                     # )
 
                     for loss_name, loss_func in val_losses[val_set].items():
+                        print(f"rec_sources_wavs: ", {rec_sources_wavs.size()})
+                        print(f"clean_wavs: ", {clean_wavs.size()})
+                        print(f"m1wavs[0].unsqueeze(1)): ", {m1wavs[0].unsqueeze(1).size()})
                         l = loss_func(rec_sources_wavs,
                                       clean_wavs,
-                                      initial_mixtures=m1wavs.unsqueeze(1))
+                                      initial_mixtures=m1wavs[0].unsqueeze(1))
                         res_dic[loss_name]['acc'] += l.tolist()
 
             audio_logger.log_batch(rec_sources_wavs[:2],

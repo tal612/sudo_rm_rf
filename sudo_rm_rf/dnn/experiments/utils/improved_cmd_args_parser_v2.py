@@ -74,7 +74,7 @@ def get_args():
                         default=1)
     parser.add_argument("--max_num_sources", type=int,
                         help="""The maximum number of sources in a mixture.""",
-                        default=4)
+                        default=2)
     parser.add_argument("--separation_task", type=str,
                         help="The separation task you would like to perform, "
                              "some of the tasks might not be available for "

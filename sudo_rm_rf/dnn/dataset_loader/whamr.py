@@ -83,8 +83,10 @@ class Dataset(torch.utils.data.Dataset, abstract_dataset.Dataset):
             extra_lambda_checks=[lambda y: os.path.lexists(y)])
         self.dataset_dirpath = self.get_path()
 
-        self.mixtures_info_metadata_path = os.path.join(
-            self.dataset_dirpath, 'metadata')
+        # self.mixtures_info_metadata_path = os.path.join(
+        #     self.dataset_dirpath, 'metadata')
+
+        self.mixtures_info_metadata_path = '/home/dsi/yechezo/sudo_rm_rf/whamr/metadata'
 
         self.timelength = self.get_arg_and_check_validness(
             'timelength', known_type=float)
