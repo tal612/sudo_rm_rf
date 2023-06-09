@@ -34,7 +34,7 @@ import sudo_rm_rf.dnn.models.sepformer as sepformer
 
 cuda0 = torch.device('cuda:0')
 
-print("check")
+print("check2")
 args = parser.get_args()
 hparams = vars(args)
 generators = dataset_setup.setup(hparams)
