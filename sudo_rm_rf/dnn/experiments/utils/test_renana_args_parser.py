@@ -14,6 +14,9 @@ def get_args():
         description='Experiment Argument Parser')
     # ===============================================
     # Datasets arguments
+    parser.add_argument("--state_dict", type=str,
+                        default=None,
+                        help="model state dictionary")
     parser.add_argument("--train", type=str, nargs='+',
                         help="Training dataset",
                         default=None,
@@ -32,37 +35,37 @@ def get_args():
                         choices=['WHAM', 'LIBRI2MIX', 'WHAMR'])
     parser.add_argument("--n_train", type=int,
                         help="""Reduce the number of training 
-                                samples to this number.""", default=5) # default=0
+                                 samples to this number.""", default=5)  # default=0
     parser.add_argument("--n_val", type=int,
                         help="""Reduce the number of evaluation 
-                                samples to this number.""", default=5) # default=0
+                                 samples to this number.""", default=5)  # default=0
     parser.add_argument("--n_test", type=int,
                         help="""Reduce the number of test 
-                                    samples to this number.""", default=5) # default=0
+                                     samples to this number.""", default=5)  # default=0
     parser.add_argument("--n_train_val", type=int,
                         help="""Reduce the number of evaluation 
-                             samples on the training set.""", default=5) # default=0
+                              samples on the training set.""", default=5)  # default=0
     parser.add_argument("--audio_timelength", type=float,
                         help="""The timelength of the audio that you want 
-                                to load in seconds.""",
+                                 to load in seconds.""",
                         default=4.)
     parser.add_argument("--min_or_max", type=str,
                         help="""Min or max if this applies to the dataset 
-                        that you use. Min means that the mixture is going to 
-                        be cropped at the minimum of all sources and for max 
-                        is going to be zero-padded""",
+                         that you use. Min means that the mixture is going to 
+                         be cropped at the minimum of all sources and for max 
+                         is going to be zero-padded""",
                         default='min',
                         choices=['min', 'max'])
     parser.add_argument("--zero_pad_audio", action='store_true',
                         help="""If a specific timelength is required all 
-                        audio sources and mixtures are going to be zero 
-                        padded in order to have the required length. If not 
-                        and a specific timelegth is required then the files 
-                        with less than required legth are not going to be 
-                        used.""", default=False)
+                         audio sources and mixtures are going to be zero 
+                         padded in order to have the required length. If not 
+                         and a specific timelegth is required then the files 
+                         with less than required legth are not going to be 
+                         used.""", default=False)
     parser.add_argument("--normalize_audio", action='store_true',
                         help="""Normalize using mean and standard deviation 
-                        before processing each audio file.""",
+                         before processing each audio file.""",
                         default=False)
     # ===============================================
     # Separation task arguments
@@ -88,16 +91,16 @@ def get_args():
     # Training params
     parser.add_argument("-bs", "--batch_size", type=int,
                         help="""The number of samples in each batch. 
-                                Warning: Cannot be less than the number of 
-                                the validation samples""", default=4)
+                                 Warning: Cannot be less than the number of 
+                                 the validation samples""", default=4)
     parser.add_argument("--n_epochs", type=int,
                         help="""The number of epochs that the 
-                            experiment should run""", default=500)
+                             experiment should run""", default=500)
     parser.add_argument("-lr", "--learning_rate", type=float,
                         help="""Initial Learning rate""", default=1e-3)
     parser.add_argument("--divide_lr_by", type=float,
                         help="""The factor that the learning rate 
-                            would be divided by""", default=3.)
+                             would be divided by""", default=3.)
     parser.add_argument("--patience", type=int,
                         help="""Patience until reducing the learning rate .""",
                         default=5)
@@ -107,8 +110,8 @@ def get_args():
                         choices=['adam', 'radam'])
     parser.add_argument("--clip_grad_norm", type=float,
                         help="""The norm value which all gradients 
-                            are going to be clipped, 0 means that no 
-                            grads are going to be clipped""",
+                             are going to be clipped, 0 means that no 
+                             grads are going to be clipped""",
                         default=5.)
     parser.add_argument("-fs", type=int,
                         help="""Sampling rate of the audio.""", default=8000)
@@ -116,7 +119,7 @@ def get_args():
     # CometML experiment configuration arguments
     parser.add_argument("-tags", "--cometml_tags", type=str,
                         nargs="+", help="""A list of tags for the cometml 
-                            experiment.""",
+                             experiment.""",
                         default=[])
     parser.add_argument("--experiment_name", type=str,
                         help="""Name of current experiment""",
@@ -129,12 +132,12 @@ def get_args():
     parser.add_argument("-cad", "--cuda_available_devices", type=str,
                         nargs="+",
                         help="""A list of Cuda IDs that would be 
-                            available for running this experiment""",
+                             available for running this experiment""",
                         default=['0'],
                         choices=['0', '1', '2', '3'])
     parser.add_argument("--n_jobs", type=int,
                         help="""The number of cpu workers for 
-                                        loading the data, etc.""", default=4)
+                                         loading the data, etc.""", default=4)
     # ===============================================
     # Local experiment logging
     parser.add_argument("-elp", "--experiment_logs_path", type=str,

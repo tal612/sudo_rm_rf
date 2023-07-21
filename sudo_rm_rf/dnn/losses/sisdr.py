@@ -457,7 +457,7 @@ class PairwiseNegSDR(_Loss):
                 torch.sum(e_noise ** 2, dim=3) + 1e-8)
         if self.take_log:
             pair_wise_sdr = 10 * torch.log10(pair_wise_sdr + 1e-8)
-        return - pair_wise_sdr
+        return - pair_wise_sdr # !!!!!!!!!! default: - !!!!!!!!!!!!!!!!!!!!!!!!
 
 class StabilizedPermInvSISDRMetric(nn.Module):
     """!

@@ -17,7 +17,7 @@ import torch
 from torch.nn import functional as F
 from tqdm import tqdm
 from pprint import pprint
-import sudo_rm_rf.dnn.experiments.utils.improved_cmd_args_parser_v2 as parser
+import sudo_rm_rf.dnn.experiments.utils.test_renana_args_parser as parser
 import sudo_rm_rf.dnn.experiments.utils.dataset_setup as dataset_setup
 import sudo_rm_rf.dnn.losses.sisdr as sisdr_lib
 import sudo_rm_rf.dnn.experiments.utils.mixture_consistency as \
@@ -34,7 +34,11 @@ import numpy as np
 
 from pytorch_model_summary import summary
 
-
+def normalize_tensor_wav(wav_tensor, eps=1e-8, std=None):
+    mean = wav_tensor.mean(-1, keepdim=True)
+    if std is None:
+        std = wav_tensor.std(-1, keepdim=True)
+    return (wav_tensor - mean) / (std + eps)
 cuda0 = torch.device('cuda:0')
 
 args = parser.get_args()
@@ -155,7 +159,7 @@ print('Trainable Parameters: {}'.format(numparams))
 
 # print(summary(model, torch.zeros((2, 1, 32000)), show_input=True, show_hierarchical=False))
 model = torch.nn.DataParallel(model).cuda(cuda0)
-
+model.load_state_dict(torch.load("/home/dsi/yechezo/sudo_rm_rf_/weights/100e/improved_sudo_epoch_40"))
 
 
 opt = torch.optim.Adam(model.parameters(), lr=hparams['learning_rate'])
@@ -164,81 +168,13 @@ opt = torch.optim.Adam(model.parameters(), lr=hparams['learning_rate'])
 #     patience=hparams['patience'], verbose=True)
 
 
-def normalize_tensor_wav(wav_tensor, eps=1e-8, std=None):
-    mean = wav_tensor.mean(-1, keepdim=True)
-    if std is None:
-        std = wav_tensor.std(-1, keepdim=True)
-    return (wav_tensor - mean) / (std + eps)
+
 
 
 tr_step = 0
 val_step = 0
 prev_epoch_val_loss = 0.
 for i in range(hparams['n_epochs']):
-    batch_step = 0
-    sum_loss = 0.
-    res_dic = {}
-    for loss_name in all_losses:
-        res_dic[loss_name] = {'mean': 0., 'std': 0., 'acc': []}
-    print("Attentive Sudo-RM-RF: || Epoch: {}/{}".format(i+1, hparams['n_epochs']))
-    model.train()
-
-    training_gen_tqdm = tqdm(generators['train'], desc='Training')
-    for data in training_gen_tqdm:
-        opt.zero_grad()
-
-        clean_wavs = data[-1].cuda(cuda0)
-        m1wavs = data[0].cuda(cuda0)
-
-        # Online mixing over samples of the batch. (This might cause to get
-        # utterances from the same speaker but it's highly improbable).
-        # Keep the exact same SNR distribution with the initial mixtures.
-        energies = torch.sum(clean_wavs ** 2, dim=-1, keepdim=True)
-        random_wavs = clean_wavs[:, torch.randperm(energies.shape[1])]
-        new_s1 = random_wavs[torch.randperm(energies.shape[0]), 0, :]
-        new_s2 = random_wavs[torch.randperm(energies.shape[0]), 1, :]
-        new_s2 = new_s2 * torch.sqrt(energies[:, 1] /
-                                     (new_s2 ** 2).sum(-1, keepdims=True))
-        new_s1 = new_s1 * torch.sqrt(energies[:, 0] /
-                                     (new_s1 ** 2).sum(-1, keepdims=True))
-        m1wavs = normalize_tensor_wav(new_s1 + new_s2)
-        clean_wavs[:, 0, :] = normalize_tensor_wav(new_s1)
-        clean_wavs[:, 1, :] = normalize_tensor_wav(new_s2)
-        # ===============================================
-
-        rec_sources_wavs = model(m1wavs.unsqueeze(1))
-        # print(f"{m1wavs.unsqueeze(1).size()=}")
-        # rec_sources_wavs = mixture_consistency.apply(
-        #     rec_sources_wavs, m1wavs.unsqueeze(1)
-        # )
-
-        l = torch.clamp(
-            back_loss_tr_loss(rec_sources_wavs, clean_wavs[:,0:2,:]),
-            min=-30., max=+30.)
-        l.backward()
-        if hparams['clip_grad_norm'] > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(),
-                                           hparams['clip_grad_norm'])
-
-        opt.step()
-
-        np_loss_value = l.detach().item()
-        sum_loss += np_loss_value
-        training_gen_tqdm.set_description(
-            f"Training, Running Avg Loss: {sum_loss / (batch_step + 1)}"
-        )
-        batch_step += 1
-
-    if hparams['patience'] > 0:
-        if tr_step % hparams['patience'] == 0:
-            new_lr = (hparams['learning_rate']
-                      / (hparams['divide_lr_by'] ** (tr_step // hparams['patience'])))
-            print('Reducing Learning rate to: {}'.format(new_lr))
-            for param_group in opt.param_groups:
-                param_group['lr'] = new_lr
-    tr_step += 1
-
-
     for val_set in [x for x in generators if not x == 'train']:
         if generators[val_set] is not None:
             model.eval()
@@ -255,7 +191,7 @@ for i in range(hparams['n_epochs']):
                         l = loss_func(rec_sources_wavs,
                                       clean_wavs[:,0:2,:],
                                       initial_mixtures=m1wavs.unsqueeze(1))
-                        res_dic[loss_name]['acc'] += l.tolist()
+                        # res_dic[loss_name]['acc'] += l.tolist()
                         print(f"{loss_name=}, {loss_func=}, {l=}")
 
     val_step += 1
@@ -271,14 +207,6 @@ for i in range(hparams['n_epochs']):
     # print(f"{std_metric=}")
 
 
-    for loss_name in res_dic:
-        res_dic[loss_name]['acc'] = []
-    pprint(res_dic)
-
-    if hparams["save_checkpoint_every"] > 0:
-        if tr_step % hparams["save_checkpoint_every"] == 0:
-            torch.save(
-                model.state_dict(),
-                os.path.join(hparams["checkpoints_path"],
-                             f"improved_sudo_epoch_{tr_step}.pt"),
-            )
+    # for loss_name in res_dic:
+    #     res_dic[loss_name]['acc'] = []
+    # pprint(res_dic)

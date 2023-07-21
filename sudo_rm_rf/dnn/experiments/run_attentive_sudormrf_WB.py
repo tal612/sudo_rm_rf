@@ -30,9 +30,12 @@ import sudo_rm_rf.dnn.models.attentive_sudormrf_v3 as \
 # import sudo_rm_rf.dnn.utils.cometml_loss_report as cometml_report
 # import sudo_rm_rf.dnn.utils.cometml_log_audio as cometml_audio_logger
 import sudo_rm_rf.dnn.models.sepformer as sepformer
-import numpy as np
 
 from pytorch_model_summary import summary
+
+import numpy as np
+import wandb
+
 
 
 cuda0 = torch.device('cuda:0')
@@ -150,13 +153,23 @@ numparams = 0
 for f in model.parameters():
     if f.requires_grad:
         numparams += f.numel()
-# experiment.log_parameter('Parameters', numparams)
+
+# start a new wandb run to track this script
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="renana-project-try",
+
+    # track hyperparameters and run metadata
+    config={
+        "hyperparameters": hparams,
+        "Trainable Parameters": numparams
+    }
+)
+
 print('Trainable Parameters: {}'.format(numparams))
 
 # print(summary(model, torch.zeros((2, 1, 32000)), show_input=True, show_hierarchical=False))
 model = torch.nn.DataParallel(model).cuda(cuda0)
-
-
 
 opt = torch.optim.Adam(model.parameters(), lr=hparams['learning_rate'])
 # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -256,20 +269,18 @@ for i in range(hparams['n_epochs']):
                                       clean_wavs[:,0:2,:],
                                       initial_mixtures=m1wavs.unsqueeze(1))
                         res_dic[loss_name]['acc'] += l.tolist()
-                        print(f"{loss_name=}, {loss_func=}, {l=}")
-
     val_step += 1
 
-    # l_name = 'train_val_SISDRi'
-    # values = res_dic[l_name]['acc']
-    # mean_metric = np.mean(values)
-    # std_metric = np.std(values)
-    #
-    # print(f"{res_dic=}")
-    # print(f"{values=}")
-    # print(f"{mean_metric=}")
-    # print(f"{std_metric=}")
+    l_name = 'train_val_SISDRi'
+    values = res_dic[l_name]['acc']
+    mean_metric = np.mean(values)
+    std_metric = np.std(values)
 
+    print(f"{values=}")
+    print(f"{mean_metric=}")
+    print(f"{std_metric=}")
+    wandb.log({"values": values, "mean_metric": mean_metric, "std_metric": std_metric,
+               "tr_step": tr_step, "val_step": val_step})
 
     for loss_name in res_dic:
         res_dic[loss_name]['acc'] = []
@@ -282,3 +293,6 @@ for i in range(hparams['n_epochs']):
                 os.path.join(hparams["checkpoints_path"],
                              f"improved_sudo_epoch_{tr_step}.pt"),
             )
+
+# [optional] finish the wandb run, necessary in notebooks
+wandb.finish()
