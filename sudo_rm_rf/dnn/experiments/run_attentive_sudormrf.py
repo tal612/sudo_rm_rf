@@ -30,9 +30,16 @@ import sudo_rm_rf.dnn.models.attentive_sudormrf_v3 as \
 # import sudo_rm_rf.dnn.utils.cometml_loss_report as cometml_report
 # import sudo_rm_rf.dnn.utils.cometml_log_audio as cometml_audio_logger
 import sudo_rm_rf.dnn.models.sepformer as sepformer
-import numpy as np
+from sudo_rm_rf.utils.early_stop import EarlyStopper
+
 
 from pytorch_model_summary import summary
+
+import numpy as np
+
+
+from datetime import date
+
 
 
 cuda0 = torch.device('cuda:0')
@@ -75,8 +82,6 @@ for val_set in [x for x in generators if not x == 'train']:
         return_individual_results=True)
 all_losses.append(back_loss_tr_loss_name)
 
-print(f"{val_losses=}")
-print(f"{all_losses=}")
 
 if hparams['model_type'] == 'relu':
     model = improved_sudormrf.SuDORMRF(out_channels=hparams['out_channels'],
@@ -153,13 +158,12 @@ numparams = 0
 for f in model.parameters():
     if f.requires_grad:
         numparams += f.numel()
-# experiment.log_parameter('Parameters', numparams)
+
+
 print('Trainable Parameters: {}'.format(numparams))
 
 # print(summary(model, torch.zeros((2, 1, 32000)), show_input=True, show_hierarchical=False))
 model = torch.nn.DataParallel(model).cuda(cuda0)
-
-
 
 opt = torch.optim.Adam(model.parameters(), lr=hparams['learning_rate'])
 # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -174,6 +178,8 @@ def normalize_tensor_wav(wav_tensor, eps=1e-8, std=None):
     return (wav_tensor - mean) / (std + eps)
 
 
+
+early_stopper = EarlyStopper(patience=3, min_delta=0.02)
 tr_step = 0
 val_step = 0
 prev_epoch_val_loss = 0.
@@ -187,10 +193,11 @@ for i in range(hparams['n_epochs']):
     print("Attentive Sudo-RM-RF: || Epoch: {}/{}".format(i+1, hparams['n_epochs']))
     model.train()
 
+    values_train = []
     training_gen_tqdm = tqdm(generators['train'], desc='Training')
     for data in training_gen_tqdm:
         opt.zero_grad()
-        print(f"{data.size()=}")
+
         clean_wavs = data[-1].cuda(cuda0)
         m1wavs = data[0].cuda(cuda0)
 
@@ -233,6 +240,8 @@ for i in range(hparams['n_epochs']):
         )
         batch_step += 1
 
+        values_train.append(np_loss_value)
+
     if hparams['patience'] > 0:
         if tr_step % hparams['patience'] == 0:
             new_lr = (hparams['learning_rate']
@@ -241,6 +250,11 @@ for i in range(hparams['n_epochs']):
             for param_group in opt.param_groups:
                 param_group['lr'] = new_lr
     tr_step += 1
+
+
+    l_name = 'train_val_SISDRi'
+    mean_metric = np.mean(values_train)
+    std_metric = np.std(values_train)
 
 
     for val_set in [x for x in generators if not x == 'train']:
@@ -260,25 +274,16 @@ for i in range(hparams['n_epochs']):
                                       clean_wavs[:,0:2,:],
                                       initial_mixtures=m1wavs.unsqueeze(1))
                         res_dic[loss_name]['acc'] += l.tolist()
-                        print(f"{loss_name=}, {loss_func=}, {l=}")
-
     val_step += 1
 
     l_name = 'train_val_SISDRi'
     values = res_dic[l_name]['acc']
     mean_metric = np.mean(values)
     std_metric = np.std(values)
-    #
-    # print(f"{res_dic=}")
-    # print(f"{values=}")
-    # print(f"{mean_metric=}")
-    # print(f"{std_metric=}")
 
 
     for loss_name in res_dic:
         res_dic[loss_name]['acc'] = []
-    pprint(res_dic)
-
 
     if hparams["save_best_weights"] == True:
         if mean_metric < best_mean:
@@ -296,3 +301,8 @@ for i in range(hparams['n_epochs']):
                     os.path.join(hparams["checkpoints_path"],
                                  f"improved_sudo_epoch_{tr_step}.pt"),
                 )
+
+    if EarlyStopper.early_stop(-mean_metric):
+        break
+
+# [optional] finish the wandb run, necessary in notebooks
