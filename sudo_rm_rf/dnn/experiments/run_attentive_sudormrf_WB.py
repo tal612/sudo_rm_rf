@@ -164,7 +164,7 @@ for f in model.parameters():
 wandb.init(
     # set the wandb project where this run will be logged
     project="renana-project-try",
-    name = f'{hparams["n_epochs"]} epochs - {date.today()}',
+    name=f'{hparams["n_epochs"]} epochs - {date.today()} - dsi0{hparams["dsi_gpu"]}',
 
     # track hyperparameters and run metadata
     config={

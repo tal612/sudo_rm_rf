@@ -15,6 +15,7 @@ import sys
 current_dir = os.path.dirname(os.path.abspath('__file__'))
 root_dir = os.path.abspath(os.path.join(current_dir, '../../../'))
 sys.path.append(root_dir)
+from sudo_rm_rf.dnn.dataset_loader.speaker_gender import get_gender
 import sudo_rm_rf.dnn.dataset_loader.abstract_dataset as abstract_dataset
 from scipy.io import wavfile
 import warnings
@@ -221,7 +222,7 @@ class Dataset(torch.utils.data.Dataset, abstract_dataset.Dataset):
         sources_wavs = torch.stack(sources_list, dim=0)
         target_wavs = torch.stack(targets_list, dim=0)
 
-        return sources_wavs, target_wavs
+        return sources_wavs, get_gender(filename), target_wavs
 
     def get_generator(self, batch_size=4, shuffle=True, num_workers=4):
         generator_params = {'batch_size': batch_size,

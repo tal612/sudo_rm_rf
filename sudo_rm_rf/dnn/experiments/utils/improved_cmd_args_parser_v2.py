@@ -13,6 +13,9 @@ def get_args():
     parser = argparse.ArgumentParser(
         description='Experiment Argument Parser')
     # ===============================================
+    parser.add_argument("--dsi_gpu", type=int, nargs='+',
+                        help="Training dataset",
+                        default=1)
     # Datasets arguments
     parser.add_argument("--train", type=str, nargs='+',
                         help="Training dataset",
