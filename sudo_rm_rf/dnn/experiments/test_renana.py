@@ -31,8 +31,14 @@ import sudo_rm_rf.dnn.models.attentive_sudormrf_v3 as \
 # import sudo_rm_rf.dnn.utils.cometml_log_audio as cometml_audio_logger
 import sudo_rm_rf.dnn.models.sepformer as sepformer
 import numpy as np
+import pandas as pd
 
 from pytorch_model_summary import summary
+
+from save_audio import save_audio
+
+path_results = '/home/dsi/yechezo/sudo_rm_rf_/sudo_rm_rf/results/55e'
+df = pd.DataFrame(columns=["si_sdr"])
 
 def normalize_tensor_wav(wav_tensor, eps=1e-8, std=None):
     mean = wav_tensor.mean(-1, keepdim=True)
@@ -159,7 +165,7 @@ print('Trainable Parameters: {}'.format(numparams))
 
 # print(summary(model, torch.zeros((2, 1, 32000)), show_input=True, show_hierarchical=False))
 model = torch.nn.DataParallel(model).cuda(cuda0)
-model.load_state_dict(torch.load("/home/dsi/yechezo/sudo_rm_rf_/weights/100e/improved_sudo_epoch_40"))
+model.load_state_dict(torch.load("/home/dsi/yechezo/sudo_rm_rf_/weights/new/55e/best_weights.pt"))
 
 
 opt = torch.optim.Adam(model.parameters(), lr=hparams['learning_rate'])
@@ -168,36 +174,56 @@ opt = torch.optim.Adam(model.parameters(), lr=hparams['learning_rate'])
 #     patience=hparams['patience'], verbose=True)
 
 
-
-
-
 tr_step = 0
 val_step = 0
 prev_epoch_val_loss = 0.
+counter = 0
 for i in range(hparams['n_epochs']):
+    res_dic = {}
+    for loss_name in all_losses:
+        res_dic[loss_name] = {'mean': 0., 'std': 0., 'acc': []}
+
     for val_set in [x for x in generators if not x == 'train']:
         if generators[val_set] is not None:
             model.eval()
             with torch.no_grad():
-                for data in tqdm(generators[val_set],
-                                 desc='Validation on {}'.format(val_set)):
-                    m1wavs = data[0].cuda()
+                i = 1
+                for data in tqdm(generators[val_set],desc='Validation on {}'.format(val_set)):
+                    if data == [[],[]]:
+                        continue
+                    try:
+                        m1wavs = data[0].cuda()
+                    except Exception as e:
+                        print(data)
+                    counter += 1
+
                     m1wavs = normalize_tensor_wav(m1wavs.sum(1)) # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                     clean_wavs = data[-1].cuda()
+                    # print(f"{data.size()=}")
+                    # print(type(data))
+                    #
+                    # print(f"{clean_wavs.size()=}")
+                    # print(type(clean_wavs))
 
                     rec_sources_wavs = model(m1wavs.unsqueeze(1))
+                    # print(type(rec_sources_wavs))
 
                     for loss_name, loss_func in val_losses[val_set].items():
                         l = loss_func(rec_sources_wavs,
                                       clean_wavs[:,0:2,:],
                                       initial_mixtures=m1wavs.unsqueeze(1))
-                        # res_dic[loss_name]['acc'] += l.tolist()
-                        print(f"{loss_name=}, {loss_func=}, {l=}")
+                        res_dic[loss_name]['acc'] += l.tolist()
+                        # print(f"{loss_name=}, {loss_func=}, {l=}")
+
+                    if i <= 20:
+                        save_audio(normalize_tensor_wav(rec_sources_wavs), m1wavs, clean_wavs, f"{path_results}/sample_{i}_{res_dic['test_SISDRi']['acc'][-1]}")
+                    i += 1
+                    df.loc[i] = res_dic['test_SISDRi']['acc'][-1]
 
     val_step += 1
 
     # l_name = 'train_val_SISDRi'
-    # values = res_dic[l_name]['acc']
+    # values = res_dic[loss_name]['acc']
     # mean_metric = np.mean(values)
     # std_metric = np.std(values)
     #
@@ -205,8 +231,20 @@ for i in range(hparams['n_epochs']):
     # print(f"{values=}")
     # print(f"{mean_metric=}")
     # print(f"{std_metric=}")
+    # print(f"{counter=}")
 
+    for loss_name in res_dic:
+        values = res_dic[loss_name]['acc']
+        mean_metric = np.mean(values)
+        std_metric = np.std(values)
+        res_dic[loss_name]['mean'] = mean_metric
+        res_dic[loss_name]['std'] = std_metric
+    pprint(res_dic)
 
-    # for loss_name in res_dic:
-    #     res_dic[loss_name]['acc'] = []
+    for loss_name in res_dic:
+        res_dic[loss_name]['acc'] = []
     # pprint(res_dic)
+
+    # passing score to Excel file
+    os.chdir(path_results)
+    df.to_excel("stats.xlsx")

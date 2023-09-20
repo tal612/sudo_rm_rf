@@ -75,6 +75,9 @@ for val_set in [x for x in generators if not x == 'train']:
         return_individual_results=True)
 all_losses.append(back_loss_tr_loss_name)
 
+print(f"{val_losses=}")
+print(f"{all_losses=}")
+
 if hparams['model_type'] == 'relu':
     model = improved_sudormrf.SuDORMRF(out_channels=hparams['out_channels'],
                                        in_channels=hparams['in_channels'],
@@ -174,6 +177,7 @@ def normalize_tensor_wav(wav_tensor, eps=1e-8, std=None):
 tr_step = 0
 val_step = 0
 prev_epoch_val_loss = 0.
+best_mean = 1000
 for i in range(hparams['n_epochs']):
     batch_step = 0
     sum_loss = 0.
@@ -186,7 +190,7 @@ for i in range(hparams['n_epochs']):
     training_gen_tqdm = tqdm(generators['train'], desc='Training')
     for data in training_gen_tqdm:
         opt.zero_grad()
-
+        print(f"{data.size()=}")
         clean_wavs = data[-1].cuda(cuda0)
         m1wavs = data[0].cuda(cuda0)
 
@@ -260,10 +264,10 @@ for i in range(hparams['n_epochs']):
 
     val_step += 1
 
-    # l_name = 'train_val_SISDRi'
-    # values = res_dic[l_name]['acc']
-    # mean_metric = np.mean(values)
-    # std_metric = np.std(values)
+    l_name = 'train_val_SISDRi'
+    values = res_dic[l_name]['acc']
+    mean_metric = np.mean(values)
+    std_metric = np.std(values)
     #
     # print(f"{res_dic=}")
     # print(f"{values=}")
@@ -275,10 +279,20 @@ for i in range(hparams['n_epochs']):
         res_dic[loss_name]['acc'] = []
     pprint(res_dic)
 
-    if hparams["save_checkpoint_every"] > 0:
-        if tr_step % hparams["save_checkpoint_every"] == 0:
+
+    if hparams["save_best_weights"] == True:
+        if mean_metric < best_mean:
+            best_mean = mean_metric
             torch.save(
                 model.state_dict(),
                 os.path.join(hparams["checkpoints_path"],
-                             f"improved_sudo_epoch_{tr_step}.pt"),
+                             f"best_weights.pt"),
             )
+    else:
+        if hparams["save_checkpoint_every"] > 0:
+            if tr_step % hparams["save_checkpoint_every"] == 0:
+                torch.save(
+                    model.state_dict(),
+                    os.path.join(hparams["checkpoints_path"],
+                                 f"improved_sudo_epoch_{tr_step}.pt"),
+                )

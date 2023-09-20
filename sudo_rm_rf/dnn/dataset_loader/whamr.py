@@ -51,6 +51,7 @@ class Dataset(torch.utils.data.Dataset, abstract_dataset.Dataset):
         normalize_audio=False, n_samples=0, zero_pad=False
     """
     def __init__(self, **kwargs):
+        print(f"{kwargs=}")
         super(Dataset, self).__init__()
         warnings.filterwarnings("ignore")
         self.kwargs = kwargs
@@ -86,7 +87,10 @@ class Dataset(torch.utils.data.Dataset, abstract_dataset.Dataset):
         # self.mixtures_info_metadata_path = os.path.join(
         #     self.dataset_dirpath, 'metadata')
 
-        self.mixtures_info_metadata_path = '/home/dsi/yechezo/sudo_rm_rf/whamr/metadata'
+        if kwargs['split'] == 'tt':
+            self.mixtures_info_metadata_path = '/home/dsi/yechezo/sudo_rm_rf/whamr/test/metadata'
+        elif kwargs['split'] == 'tr':
+            self.mixtures_info_metadata_path = '/home/dsi/yechezo/sudo_rm_rf/whamr/train/metadata'
 
         self.timelength = self.get_arg_and_check_validness(
             'timelength', known_type=float)
@@ -167,7 +171,13 @@ class Dataset(torch.utils.data.Dataset, abstract_dataset.Dataset):
         mixture_path = os.path.join(self.dataset_dirpath,
                                     WHAM_TASKS[self.task]['mixture'],
                                     filename)
-        _, waveform = wavfile.read(mixture_path)
+        # print(f"{mixture_path=}")
+        try:
+            _, waveform = wavfile.read(mixture_path)
+        except Exception as e:
+            return [],[]
+
+
         max_len = len(waveform)
         rand_start = 0
         if self.augment and max_len > self.time_samples:

@@ -30,11 +30,16 @@ import sudo_rm_rf.dnn.models.attentive_sudormrf_v3 as \
 # import sudo_rm_rf.dnn.utils.cometml_loss_report as cometml_report
 # import sudo_rm_rf.dnn.utils.cometml_log_audio as cometml_audio_logger
 import sudo_rm_rf.dnn.models.sepformer as sepformer
+from sudo_rm_rf.utils.early_stop import EarlyStopper
+
 
 from pytorch_model_summary import summary
 
 import numpy as np
 import wandb
+
+
+from datetime import date
 
 
 
@@ -77,6 +82,7 @@ for val_set in [x for x in generators if not x == 'train']:
         zero_mean=True, backward_loss=False, improvement=True,
         return_individual_results=True)
 all_losses.append(back_loss_tr_loss_name)
+
 
 if hparams['model_type'] == 'relu':
     model = improved_sudormrf.SuDORMRF(out_channels=hparams['out_channels'],
@@ -158,6 +164,7 @@ for f in model.parameters():
 wandb.init(
     # set the wandb project where this run will be logged
     project="renana-project-try",
+    name = f'{hparams["n_epochs"]} epochs - {date.today()}',
 
     # track hyperparameters and run metadata
     config={
@@ -184,9 +191,12 @@ def normalize_tensor_wav(wav_tensor, eps=1e-8, std=None):
     return (wav_tensor - mean) / (std + eps)
 
 
+
+early_stopper = EarlyStopper(patience=3, min_delta=0.02)
 tr_step = 0
 val_step = 0
 prev_epoch_val_loss = 0.
+best_mean = 1000
 for i in range(hparams['n_epochs']):
     batch_step = 0
     sum_loss = 0.
@@ -196,6 +206,7 @@ for i in range(hparams['n_epochs']):
     print("Attentive Sudo-RM-RF: || Epoch: {}/{}".format(i+1, hparams['n_epochs']))
     model.train()
 
+    values_train = []
     training_gen_tqdm = tqdm(generators['train'], desc='Training')
     for data in training_gen_tqdm:
         opt.zero_grad()
@@ -242,6 +253,8 @@ for i in range(hparams['n_epochs']):
         )
         batch_step += 1
 
+        values_train.append(np_loss_value)
+
     if hparams['patience'] > 0:
         if tr_step % hparams['patience'] == 0:
             new_lr = (hparams['learning_rate']
@@ -250,6 +263,14 @@ for i in range(hparams['n_epochs']):
             for param_group in opt.param_groups:
                 param_group['lr'] = new_lr
     tr_step += 1
+
+
+    l_name = 'train_val_SISDRi'
+    mean_metric = np.mean(values_train)
+    std_metric = np.std(values_train)
+
+    wandb.log({"values_train": values_train, "mean_metric_train": mean_metric, "std_metric_train": std_metric,
+               "tr_step_train": tr_step, "val_step_train": val_step})
 
 
     for val_set in [x for x in generators if not x == 'train']:
@@ -276,23 +297,32 @@ for i in range(hparams['n_epochs']):
     mean_metric = np.mean(values)
     std_metric = np.std(values)
 
-    print(f"{values=}")
-    print(f"{mean_metric=}")
-    print(f"{std_metric=}")
-    wandb.log({"values": values, "mean_metric": mean_metric, "std_metric": std_metric,
-               "tr_step": tr_step, "val_step": val_step})
+
+    wandb.log({"values_val": values, "mean_metric_val": mean_metric, "std_metric_val": std_metric,
+               "tr_step_val": tr_step, "val_step_val": val_step})
 
     for loss_name in res_dic:
         res_dic[loss_name]['acc'] = []
-    pprint(res_dic)
 
-    if hparams["save_checkpoint_every"] > 0:
-        if tr_step % hparams["save_checkpoint_every"] == 0:
+    if hparams["save_best_weights"] == True:
+        if mean_metric < best_mean:
+            best_mean = mean_metric
             torch.save(
                 model.state_dict(),
                 os.path.join(hparams["checkpoints_path"],
-                             f"improved_sudo_epoch_{tr_step}.pt"),
+                             f"best_weights.pt"),
             )
+    else:
+        if hparams["save_checkpoint_every"] > 0:
+            if tr_step % hparams["save_checkpoint_every"] == 0:
+                torch.save(
+                    model.state_dict(),
+                    os.path.join(hparams["checkpoints_path"],
+                                 f"improved_sudo_epoch_{tr_step}.pt"),
+                )
+
+    if EarlyStopper.early_stop(-mean_metric):
+        break
 
 # [optional] finish the wandb run, necessary in notebooks
 wandb.finish()

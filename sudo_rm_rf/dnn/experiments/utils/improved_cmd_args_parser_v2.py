@@ -32,16 +32,16 @@ def get_args():
                         choices=['WHAM', 'LIBRI2MIX', 'WHAMR'])
     parser.add_argument("--n_train", type=int,
                         help="""Reduce the number of training 
-                                samples to this number.""", default=5) # default=0
+                                samples to this number.""", default=0) # default=0
     parser.add_argument("--n_val", type=int,
                         help="""Reduce the number of evaluation 
-                                samples to this number.""", default=5) # default=0
+                                samples to this number.""", default=0) # default=0
     parser.add_argument("--n_test", type=int,
                         help="""Reduce the number of test 
-                                    samples to this number.""", default=5) # default=0
+                                    samples to this number.""", default=0) # default=0
     parser.add_argument("--n_train_val", type=int,
                         help="""Reduce the number of evaluation 
-                             samples on the training set.""", default=5) # default=0
+                             samples on the training set.""", default=0) # default=0
     parser.add_argument("--audio_timelength", type=float,
                         help="""The timelength of the audio that you want 
                                 to load in seconds.""",
@@ -149,6 +149,9 @@ def get_args():
     parser.add_argument("--save_checkpoint_every", type=int,
                         help="""Number of epochs between each model save.""",
                         default=0)
+    parser.add_argument("--save_best_weights", type=bool,
+                        help="""Save weight only if it improves""",
+                        default=True)
     # ===============================================
     # Separation model (SuDO-RM-RF) params
     parser.add_argument("--out_channels", type=int,
