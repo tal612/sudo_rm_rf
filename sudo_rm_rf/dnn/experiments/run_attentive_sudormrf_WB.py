@@ -42,8 +42,18 @@ import wandb
 from datetime import date
 
 
+device_count = torch.cuda.device_count()
 
-cuda0 = torch.device('cuda:0')
+
+
+# for i in range(device_count):
+#     print(f"Device {i}: {torch.cuda.get_device_name(i)}")
+# device_id = 1
+# torch.cuda.set_device(device_id)
+
+cuda0 = torch.device('cuda:1') # 'cuda:0'
+
+
 
 args = parser.get_args()
 hparams = vars(args)
@@ -55,9 +65,19 @@ else:
     hparams['n_sources'] = 2
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([cad for cad in hparams['cuda_available_devices']])
+# os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([cad for cad in hparams['cuda_available_devices']])
+# print()
 # print(','.join(
 #     [cad for cad in hparams['cuda_available_devices']]))
+# print()
+# print(hparams['cuda_available_devices'])
+
+device_count = torch.cuda.device_count()
+# print()
+# print(','.join([str(_) for _ in range(device_count)]))
+# print()
+os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([str(_) for _ in range(device_count)])
+
 
 back_loss_tr_loss_name, back_loss_tr_loss = (
     'tr_back_loss_SISDRi',
@@ -164,7 +184,7 @@ for f in model.parameters():
 wandb.init(
     # set the wandb project where this run will be logged
     project="renana-project-try",
-    name=f'{hparams["n_epochs"]} epochs - {date.today()} - dsi0{hparams["dsi_gpu"]}',
+    name=f'{hparams["n_epochs"]} epochs - {date.today()} - dsi_0{hparams["dsi_gpu"][0]}',
 
     # track hyperparameters and run metadata
     config={
@@ -175,8 +195,15 @@ wandb.init(
 
 print('Trainable Parameters: {}'.format(numparams))
 
+
+device_ids_ = [1, 2, 0]
+# device_id_best = 1
 # print(summary(model, torch.zeros((2, 1, 32000)), show_input=True, show_hierarchical=False))
-model = torch.nn.DataParallel(model).cuda(cuda0)
+model = torch.nn.DataParallel(model, device_ids=device_ids_)      #.cuda(cuda0)
+
+
+model.to(f'cuda:{model.device_ids[0]}')
+
 
 opt = torch.optim.Adam(model.parameters(), lr=hparams['learning_rate'])
 # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -192,7 +219,7 @@ def normalize_tensor_wav(wav_tensor, eps=1e-8, std=None):
 
 
 
-early_stopper = EarlyStopper(patience=3, min_delta=0.02)
+early_stopper = EarlyStopper(patience=6, min_delta=0.02)
 tr_step = 0
 val_step = 0
 prev_epoch_val_loss = 0.
@@ -230,7 +257,7 @@ for i in range(hparams['n_epochs']):
         clean_wavs[:, 1, :] = normalize_tensor_wav(new_s2)
         # ===============================================
 
-        rec_sources_wavs = model(m1wavs.unsqueeze(1))
+        rec_sources_wavs = model(m1wavs.unsqueeze(1))#.cuda(cuda0) # .cuda(cuda0) - ???
         # print(f"{m1wavs.unsqueeze(1).size()=}")
         # rec_sources_wavs = mixture_consistency.apply(
         #     rec_sources_wavs, m1wavs.unsqueeze(1)
@@ -279,9 +306,9 @@ for i in range(hparams['n_epochs']):
             with torch.no_grad():
                 for data in tqdm(generators[val_set],
                                  desc='Validation on {}'.format(val_set)):
-                    m1wavs = data[0].cuda()
+                    m1wavs = data[0].cuda(cuda0) # !!!!!!!!!!!! cuda0 - ?
                     m1wavs = normalize_tensor_wav(m1wavs.sum(1)) # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                    clean_wavs = data[-1].cuda()
+                    clean_wavs = data[-1].cuda(cuda0) # !!!!!!!!!!!! cuda0 - ?
 
                     rec_sources_wavs = model(m1wavs.unsqueeze(1))
 
@@ -321,7 +348,7 @@ for i in range(hparams['n_epochs']):
                                  f"improved_sudo_epoch_{tr_step}.pt"),
                 )
 
-    if EarlyStopper.early_stop(-mean_metric):
+    if early_stopper.early_stop(-mean_metric):
         break
 
 # [optional] finish the wandb run, necessary in notebooks

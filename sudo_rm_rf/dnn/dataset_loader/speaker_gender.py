@@ -131,12 +131,21 @@ speakers_gender = {
     "432": "F"
 }
 
+classes = {
+    "MM": 0,
+    "FM": 1,
+    "MF": 1,
+    "FF": 2
+
+}
+
 
 def get_gender(file_name):
     _ = file_name.split('_')
     speaker1 = _[0][0:3]
     speaker2 = _[2][0:3]
-    return speakers_gender[speaker1], speakers_gender[speaker2]
+    total = speakers_gender[speaker1] + speakers_gender[speaker2]
+    return classes[total]
 
 
 if __name__ == "__main__":

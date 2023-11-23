@@ -13,6 +13,7 @@ class EarlyStopper:
         else:
             self.counter += 1
             if self.counter >= self.patience:
+                print("Early Stopping :)")
                 return True
         return False
 

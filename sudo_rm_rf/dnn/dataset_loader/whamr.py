@@ -175,6 +175,7 @@ class Dataset(torch.utils.data.Dataset, abstract_dataset.Dataset):
         # print(f"{mixture_path=}")
         try:
             _, waveform = wavfile.read(mixture_path)
+            # print(f"sample rate is {_}")
         except Exception as e:
             return [],[]
 
