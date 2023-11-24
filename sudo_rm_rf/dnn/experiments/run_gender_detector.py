@@ -31,8 +31,8 @@ import numpy as np
 
 from datetime import date
 
-WB = True
-INSPECT = False
+WB = False
+INSPECT = True
 
 
 cuda0 = torch.device('cuda:2')
@@ -43,7 +43,7 @@ hparams = vars(args)
 if INSPECT:
     flags = ['n_train_val', 'n_test', 'n_val', 'n_train']
     for flag in flags:
-        hparams[flag] = 2
+        hparams[flag] = 10
 
 generators = dataset_setup.setup(hparams)
 
@@ -109,6 +109,7 @@ for i in range(hparams['n_epochs']):
 
     values_train = []
     training_gen_tqdm = tqdm(generators['train'], desc='Training')
+
     corrects = 0
     for j, data in enumerate(training_gen_tqdm):
         # data = [sources_wavs, get_gender(filename), target_wavs]
@@ -155,12 +156,12 @@ for i in range(hparams['n_epochs']):
     q = 0
     val_loss = 0
     corrects = 0
+    val_gen_tqdm = tqdm(generators['train_val'])
     for val_set in [x for x in generators if not x == 'train']:
         if generators[val_set] is not None:
             model.eval()
             with torch.no_grad():
-                for data in tqdm(generators[val_set],
-                                 desc='Validation on {}   |   Accuracy: {}      '.format(val_set, corrects/(q+1))):
+                for data in val_gen_tqdm:
                     m1wavs = data[0].cuda(cuda0)
                     label = data[1].cuda(cuda0)
 
@@ -174,12 +175,16 @@ for i in range(hparams['n_epochs']):
                     if int(decision) == int(label):
                         corrects += 1
                     q += 1
+
+                    val_gen_tqdm.set_description('Validation on {}   |   Accuracy: {}      '
+                                                 .format(val_set, corrects / q))
+
     val_step += 1
     if WB:
         wandb.log({"loss_val": val_loss / q,
                    "accuracy": corrects / q,
                    "val_step": val_step})
-    print(f"accuracy is {corrects / q}")
+    # print(f"accuracy is {corrects / q}")
 
 if WB:
     wandb.finish()
