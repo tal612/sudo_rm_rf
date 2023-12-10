@@ -22,8 +22,13 @@ import torch
 import torch.nn as nn
 
 
+CUDA = 2
+
 class ZFnet2(nn.Module):
-    def __init__(self, img_channels, num_classes, dropout=0.5):
+    def __init__(self, img_channels, num_classes, dropout=0.5, cuda=1):
+        global CUDA
+
+        CUDA = cuda
         super(ZFnet2, self).__init__()
         self.conv1 = nn.Conv2d(img_channels,
                                out_channels=96,
@@ -54,9 +59,9 @@ class ZFnet2(nn.Module):
         self.norm3 = nn.LocalResponseNorm(256)
         self.avgpool = nn.AdaptiveAvgPool2d(output_size=(6, 6))
 
-        self.fc1 = nn.Linear(9216, 4096)
-        self.fc2 = nn.Linear(4096, 4096)
-        self.fc3 = nn.Linear(4096, num_classes)
+        self.fc1 = nn.Linear(9216, 2048)
+        self.fc2 = nn.Linear(2048, 512)
+        self.fc3 = nn.Linear(512, num_classes)
 
         self.dropout = nn.Dropout(p=dropout)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2)
@@ -94,7 +99,8 @@ class ZFnet2(nn.Module):
 def ZFNet2f(img_channels=3, num_classes=1000, dropout=0.5): return ZFnet2(img_channels=img_channels,
                                                                        num_classes=num_classes, dropout=dropout)
 class GenderDetector(nn.Module):
-    def __init__(self):
+    def __init__(self, cuda=2):
+        global CUDA
         super().__init__()
         self.flatten = nn.Flatten(0)
         self.linear_relu_stack = nn.Sequential(
@@ -108,14 +114,15 @@ class GenderDetector(nn.Module):
             nn.ReLU(),
             nn.Dropout(0.25),
             nn.Linear(128, 3),
-            nn.Softmax()
+            # nn.Softmax()
         )
+        CUDA = cuda
 
     def forward(self, x):
         x = self.flatten(extract_features(x))
-        # print(x.shape)
+        # print(x.device)
         logits = self.linear_relu_stack(x)
-        return logits
+        return logits.unsqueeze(0)
 
 
 class ZFNet1(nn.Module):
@@ -355,6 +362,7 @@ class ZFNet(nn.Module):
         return y
 
 def extract_mel(signal):
+    global CUDA
     y = signal.numpy(force=True)
     y = np.sum(y[0], axis=0)
     # print(f'{y.shape=}')
@@ -387,7 +395,7 @@ def extract_mel(signal):
     # plt.imshow(img)
     # plt.show()
     # print(f'{img=}')
-    return torch.Tensor(img.T).cuda(2)
+    return torch.Tensor(img.T).cuda(CUDA)
 
     # plt.show()
     # return ms
@@ -398,6 +406,7 @@ def extract_mel(signal):
     # print(img.shape)
     # return img
 def extract_features(signal):
+    global CUDA
     X = signal.numpy(force=True)
     # print(X)
     # print(f"input size is {signal.size()}")
@@ -420,7 +429,7 @@ def extract_features(signal):
     tonnetz = np.mean(librosa.feature.tonnetz(y=librosa.effects.harmonic(X),
                                               sr=sample_rate, fmin=20).T, axis=0)
 
-    return torch.Tensor(np.concatenate((mfccs, chroma, mel, contrast, tonnetz))).cuda()
+    return torch.Tensor(np.concatenate((mfccs, chroma, mel, contrast, tonnetz))).cuda(CUDA)
 
     # print(mfccs.shape)
     # print(f"{mfccs.shape=}")

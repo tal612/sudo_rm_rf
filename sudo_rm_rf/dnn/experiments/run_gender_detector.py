@@ -31,11 +31,11 @@ import numpy as np
 
 from datetime import date
 
-WB = False
-INSPECT = True
+WB = True
+INSPECT = False
 
 
-cuda0 = torch.device('cuda:2')
+cuda0 = torch.device('cuda:0')
 
 args = parser.get_args()
 hparams = vars(args)
@@ -61,10 +61,12 @@ os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([cad for cad in hparams['cuda_avai
 
 
 # print(summary(model, torch.zeros((2, 1, 32000)), show_input=True, show_hierarchical=False))
-model = ZFNet(class_count=3)
-model = ZFNet2f(3, 3)
+# model = ZFNet(class_count=3)
+# model = ZFNet2f(3, 3)
+model = GenderDetector(cuda=0)
 model.to(cuda0)
-# summary(model, input_size=(1, 3, 224, 224))
+hparams['learning_rate'] = 0.0001 # Original = 0.001 ----> 0.01 ----> 0.1 ----> 1 ----> 10 ----> 0.0001
+# summary(model, input_size=(1, 3, 32000))
 opt = torch.optim.Adam(model.parameters(), lr=hparams['learning_rate'])
 
 # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -76,7 +78,7 @@ dsi_num = hparams["dsi_gpu"][0] if type(hparams["dsi_gpu"]) is list else 0
 if WB:
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Training Gender Detector ZFNet",
+        project="Training Gender Detector NN",
         name=f'{hparams["n_epochs"]} epochs - {date.today()} - dsi_0{dsi_num}',
 
         # track hyperparameters and run metadata
@@ -122,8 +124,10 @@ for i in range(hparams['n_epochs']):
         label = label_raw
         # features = model.extract_features(m1wavs).cuda()
         # print(f"{features.device=}")
+        # print(m1wavs.size())
         output_prob = model(m1wavs)
-        # print(output_prob.shape)
+        # print(torch.nn.functional.softmax(output_prob))
+
         _, decision = torch.max(torch.nn.functional.softmax(output_prob), 1)
         # print(int(decision), int(label))
         # print(output_prob, label)

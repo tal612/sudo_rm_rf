@@ -137,7 +137,7 @@ def get_args():
                         choices=['0', '1', '2', '3'])
     parser.add_argument("--n_jobs", type=int,
                         help="""The number of cpu workers for 
-                                        loading the data, etc.""", default=1)
+                                        loading the data, etc.""", default=0) # Original: 4
     # ===============================================
     # Local experiment logging
     parser.add_argument("-elp", "--experiment_logs_path", type=str,
