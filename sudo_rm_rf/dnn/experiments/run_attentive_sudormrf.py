@@ -34,6 +34,7 @@ from sudo_rm_rf.utils.early_stop import EarlyStopper
 
 
 from pytorch_model_summary import summary
+from torchinfo import summary
 
 import numpy as np
 
@@ -184,6 +185,7 @@ tr_step = 0
 val_step = 0
 prev_epoch_val_loss = 0.
 best_mean = 1000
+summary(model, input_size=(2, 1, 32000))
 for i in range(hparams['n_epochs']):
     batch_step = 0
     sum_loss = 0.

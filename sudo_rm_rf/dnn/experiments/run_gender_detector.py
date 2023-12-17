@@ -21,21 +21,20 @@ from pprint import pprint
 import sudo_rm_rf.dnn.experiments.utils.improved_cmd_args_parser_v2 as parser
 import sudo_rm_rf.dnn.experiments.utils.dataset_setup as dataset_setup
 from sudo_rm_rf.dnn.models.gender_detector import GenderDetector, ZFNet, ZFNet1, ZFNet2f
+from sudo_rm_rf.dnn.models.gender_detector_CONV import GenderDetectorConv
 from sudo_rm_rf.utils.early_stop import EarlyStopper
 from torch import nn
 import wandb
 from torchinfo import summary
 
-
 import numpy as np
 
-from datetime import date
+from datetime import datetime, date
 
 WB = True
 INSPECT = False
 
-
-cuda0 = torch.device('cuda:0')
+cuda0 = torch.device('cuda:1')
 
 args = parser.get_args()
 hparams = vars(args)
@@ -63,11 +62,23 @@ os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([cad for cad in hparams['cuda_avai
 # print(summary(model, torch.zeros((2, 1, 32000)), show_input=True, show_hierarchical=False))
 # model = ZFNet(class_count=3)
 # model = ZFNet2f(3, 3)
-model = GenderDetector(cuda=0)
+# model = GenderDetector(cuda=1)
+# hparams['model'] = 'CNN'
+
+wd = hparams['weight_decay']
+
+if hparams['model'][0] == 'CNN':
+    model = GenderDetectorConv(3)
+    # wd = 0.000175 # 0.0001
+else: # NN
+    model = GenderDetector(cuda=1)
+    # wd = 0
 model.to(cuda0)
-hparams['learning_rate'] = 0.0001 # Original = 0.001 ----> 0.01 ----> 0.1 ----> 1 ----> 10 ----> 0.0001
+hparams[
+    'learning_rate'] = 0.001  # Original = 0.001 ----> 0.01 ----> 0.1 ----> 1 ----> 10 ----> 0.0001 ----> 0.001 (conv) ----> 0.01 (conv) ----> 0.001 (conv) ----> 0.1 (conv)
+
 # summary(model, input_size=(1, 3, 32000))
-opt = torch.optim.Adam(model.parameters(), lr=hparams['learning_rate'])
+opt = torch.optim.Adam(model.parameters(), lr=hparams['learning_rate'], weight_decay=wd)
 
 # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 #     optimizer=opt, mode='max', factor=1. / hparams['divide_lr_by'],
@@ -78,8 +89,8 @@ dsi_num = hparams["dsi_gpu"][0] if type(hparams["dsi_gpu"]) is list else 0
 if WB:
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Training Gender Detector NN",
-        name=f'{hparams["n_epochs"]} epochs - {date.today()} - dsi_0{dsi_num}',
+        project=f"Training Gender Detector {hparams['model'][0]}",
+        name=f'{hparams["n_epochs"]} epochs - {date.today()} - dsi_0{dsi_num} - weights_decay={wd}', # - Dr=0.75,0.75
 
         # track hyperparameters and run metadata
         config={
@@ -101,7 +112,8 @@ val_step = 0
 prev_epoch_val_loss = 0.
 best_mean = 1000
 criterion = nn.CrossEntropyLoss()
-
+starting_time = datetime.now()
+# print(f"{hparams['checkpoints_path']=}")
 for i in range(hparams['n_epochs']):
     batch_step = 0
     sum_loss = 0.
@@ -127,7 +139,7 @@ for i in range(hparams['n_epochs']):
         # print(m1wavs.size())
         output_prob = model(m1wavs)
         # print(torch.nn.functional.softmax(output_prob))
-
+        # print(f"{output_prob=}")
         _, decision = torch.max(torch.nn.functional.softmax(output_prob), 1)
         # print(int(decision), int(label))
         # print(output_prob, label)
@@ -135,8 +147,9 @@ for i in range(hparams['n_epochs']):
         # print(f'{output_prob=}     {label=}')
         loss = criterion(input=output_prob, target=label)
 
-        loss.backward()
         opt.zero_grad()
+        loss.backward()
+        opt.step()
 
         sum_loss += loss.item()
         if int(decision) == int(label):
@@ -146,19 +159,22 @@ for i in range(hparams['n_epochs']):
         #     running_loss = 0.0
 
         training_gen_tqdm.set_description(
-            f"Training, Running Avg Loss: {sum_loss / (batch_step + 1)}   |   Accuracy: {corrects/(batch_step + 1)}    "
+            f"Training, Running Avg Loss: {sum_loss / (batch_step + 1)}   |   Accuracy: {corrects / (batch_step + 1)}    "
         )
         batch_step += 1
+
 
     tr_step += 1
     if WB:
         wandb.log({"loss_train": sum_loss / batch_step,
-                   "tr_step_train": tr_step})
+                   "tr_step_train": tr_step,
+                   "tr_accuracy": corrects / batch_step
+                   })
 
     # model.extract_features(m1wavs)
 
     q = 0
-    val_loss = 0
+    val_loss_sum = 0
     corrects = 0
     val_gen_tqdm = tqdm(generators['train_val'])
     for val_set in [x for x in generators if not x == 'train']:
@@ -174,7 +190,7 @@ for i in range(hparams['n_epochs']):
                     # print("VAL",int(decision), int(label))
                     # print(output_prob, label)
                     loss = criterion(input=output_prob, target=label)
-                    val_loss += loss.item()
+                    val_loss_sum += loss.item()
 
                     if int(decision) == int(label):
                         corrects += 1
@@ -184,11 +200,22 @@ for i in range(hparams['n_epochs']):
                                                  .format(val_set, corrects / q))
 
     val_step += 1
+    val_loss = val_loss_sum / q
     if WB:
-        wandb.log({"loss_val": val_loss / q,
-                   "accuracy": corrects / q,
+        wandb.log({"loss_val": val_loss,
+                   "accuracy_val": corrects / q,
                    "val_step": val_step})
     # print(f"accuracy is {corrects / q}")
+
+    if hparams["save_best_weights"]:
+        if val_loss < best_mean:
+            best_mean = val_loss
+            torch.save(
+                model.state_dict(),
+                os.path.join(hparams["checkpoints_path"],
+                             f"{hparams['model'][0]:<3}       lr={hparams['learning_rate']:<10}       weights_decay={wd:<10}"
+                             f"       time={starting_time.strftime('%Y-%m-%d %H:%M:%S')}.pt"),
+            )
 
 if WB:
     wandb.finish()

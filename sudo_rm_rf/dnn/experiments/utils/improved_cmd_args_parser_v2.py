@@ -16,6 +16,10 @@ def get_args():
     parser.add_argument("--dsi_gpu", type=int, nargs='+',
                         help="Training dataset",
                         default=1)
+    parser.add_argument("--model", type=str, nargs='+',
+                        help="cnn or nn",
+                        default="NN",
+                        choices=['NN', 'CNN'])
     # Datasets arguments
     parser.add_argument("--train", type=str, nargs='+',
                         help="Training dataset",
@@ -98,6 +102,8 @@ def get_args():
                             experiment should run""", default=500)
     parser.add_argument("-lr", "--learning_rate", type=float,
                         help="""Initial Learning rate""", default=1e-3)
+    parser.add_argument("-wd", "--weight_decay", type=float,
+                        help="""Initial Weight Decay""", default=0) # extra
     parser.add_argument("--divide_lr_by", type=float,
                         help="""The factor that the learning rate 
                             would be divided by""", default=3.)

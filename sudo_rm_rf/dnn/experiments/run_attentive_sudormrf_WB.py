@@ -219,7 +219,7 @@ def normalize_tensor_wav(wav_tensor, eps=1e-8, std=None):
 
 
 
-early_stopper = EarlyStopper(patience=6, min_delta=0.02)
+# early_stopper = EarlyStopper(patience=6, min_delta=0.02)
 tr_step = 0
 val_step = 0
 prev_epoch_val_loss = 0.
@@ -348,8 +348,8 @@ for i in range(hparams['n_epochs']):
                                  f"improved_sudo_epoch_{tr_step}.pt"),
                 )
 
-    if early_stopper.early_stop(-mean_metric):
-        break
+    # if early_stopper.early_stop(-mean_metric):
+    #     break
 
 # [optional] finish the wandb run, necessary in notebooks
 wandb.finish()
